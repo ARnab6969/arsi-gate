@@ -3,84 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARSI GATE | Remote Control</title>
+    <title>ARSI GATE | QR SCANNER</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; background: #000; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
-        .gate-card { background: #111; padding: 2.5rem; border-radius: 30px; text-align: center; border: 2px solid #333; width: 85%; max-width: 350px; }
-        .unlock-btn { width: 150px; height: 150px; border-radius: 50%; border: none; background: #ef4444; color: white; font-size: 1.2rem; font-weight: bold; cursor: pointer; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); transition: 0.3s; margin: 20px 0; }
-        .unlock-btn.active { background: #22c55e; box-shadow: 0 0 30px rgba(34, 197, 94, 0.6); transform: scale(0.95); }
-        .status-text { margin-top: 10px; font-size: 0.9rem; color: #666; }
-        .member-info { font-size: 0.8rem; color: #4ade80; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
+        body { font-family: sans-serif; background: #121212; color: white; margin: 0; text-align: center; }
+        #reader { width: 100%; max-width: 500px; margin: auto; background: #000; }
+        .container { padding: 20px; }
+        .status-box { margin-top: 20px; padding: 15px; border-radius: 10px; background: #1e1e1e; border: 1px solid #333; }
+        #result { font-size: 1.5rem; font-weight: bold; color: #4ade80; margin: 10px 0; }
     </style>
 </head>
 <body>
 
-<div class="gate-card">
-    <div id="member-display" class="member-info">Verifying Access...</div>
-    <button id="gateBtn" class="unlock-btn" onclick="triggerGate()">PRESS TO<br>UNLOCK</button>
-    <div id="status" class="status-text">Standby Mode</div>
+<div class="container">
+    <h2>ARSI GATE SCANNER</h2>
+    <p>Align Member QR/Token within the frame</p>
+    
+    <div id="reader"></div>
+
+    <div class="status-box">
+        <div id="result">Ready to Scan</div>
+        <div id="debug" style="font-size: 0.8rem; color: #666;">Waiting for camera...</div>
+    </div>
 </div>
 
 <script>
-    // 1. GRAB DATA FROM URL (The stuff passed from your Flask Login)
-    const urlParams = new URLSearchParams(window.location.search);
-    const memberId = urlParams.get('member_id');
-    const secretToken = urlParams.get('secret_token'); // This is your '1234'
+    const html5QrCode = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-    // 2. CHECK IF DATA EXISTS
-    if (!memberId || !secretToken) {
-        document.getElementById('member-display').innerHTML = "SECURITY ERROR: NO TOKEN";
-        document.getElementById('member-display').style.color = "red";
-        document.getElementById('gateBtn').disabled = true;
-        document.getElementById('gateBtn').style.background = "#333";
-    } else {
-        document.getElementById('member-display').innerHTML = "MEMBER ID: " + memberId + " | AUTH SYNCED";
-    }
+    // Start the camera
+    html5QrCode.start(
+        { facingMode: "environment" }, // Use back camera
+        config,
+        (decodedText) => {
+            // Logic when a QR/Token is detected
+            processScan(decodedText);
+        },
+        (errorMessage) => {
+            // Keep scanning even if there's a minor error
+        }
+    ).catch(err => {
+        document.getElementById('debug').innerHTML = "Camera Error: " + err;
+    });
 
-    // 3. TRIGGER THE GATE
-    function triggerGate() {
-        const btn = document.getElementById('gateBtn');
-        const status = document.getElementById('status');
+    function processScan(token) {
+        // Stop scanning temporarily so it doesn't spam requests
+        html5QrCode.pause();
         
-        btn.classList.add('active');
-        btn.innerHTML = "OPENING...";
-        status.innerHTML = "Sending signal to Gym Server...";
+        document.getElementById('result').innerHTML = "Scanned: " + token;
+        document.getElementById('debug').innerHTML = "Sending to server...";
 
-        // Replace 'YOUR_LOCAL_IP' with the actual IP of your Gym Computer
-        // For example: http://192.168.1.5:5000/api/mobile-qr-check-in
-        fetch('http://localhost:5000/api/mobile-qr-check-in', {
+        // Send the scanned token to your local Python server
+        // Use '1234' as the secret_token for your universal logic
+        fetch('http://YOUR_LOCAL_IP:5000/api/mobile-qr-check-in', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                member_id: memberId,
-                secret_token: secretToken
+                member_id: "scanner_input", // We identify this as a scanner scan
+                secret_token: token         // The code read by the camera
             })
         })
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
             if (data.status === 'granted') {
-                status.innerHTML = "ACCESS GRANTED!";
-                setTimeout(() => {
-                    btn.classList.remove('active');
-                    btn.innerHTML = "PRESS TO<br>UNLOCK";
-                    status.innerHTML = "Standby Mode";
-                }, 3000);
+                document.getElementById('result').innerHTML = "ACCESS GRANTED";
+                document.getElementById('result').style.color = "#4ade80";
             } else {
-                alert("Denied: " + data.message);
-                resetBtn();
+                document.getElementById('result').innerHTML = "DENIED: " + data.message;
+                document.getElementById('result').style.color = "#f87171";
             }
+            
+            // Resume camera after 3 seconds
+            setTimeout(() => {
+                document.getElementById('result').innerHTML = "Ready to Scan";
+                document.getElementById('result').style.color = "#4ade80";
+                html5QrCode.resume();
+            }, 3000);
         })
-        .catch(error => {
-            alert("Connection Error! Is the Gym PC Server running?");
-            resetBtn();
+        .catch(err => {
+            alert("Local Server Not Found! Check IP/Network.");
+            html5QrCode.resume();
         });
-    }
-
-    function resetBtn() {
-        const btn = document.getElementById('gateBtn');
-        btn.classList.remove('active');
-        btn.innerHTML = "PRESS TO<br>UNLOCK";
-        document.getElementById('status').innerHTML = "Connection Failed";
     }
 </script>
 
