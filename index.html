@@ -1,126 +1,83 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Arsi Gym Entry</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
-
-<style>
-body{
-    margin:0;
-    background:#0f0f0f;
-    color:white;
-    font-family:Arial, sans-serif;
-    text-align:center;
-}
-
-.container{
-    padding:20px;
-}
-
-h1{
-    color:#00ff99;
-}
-
-#reader{
-    margin-top:20px;
-}
-
-.result{
-    margin-top:25px;
-    font-size:24px;
-    font-weight:bold;
-}
-
-.granted{
-    color:#00ff99;
-}
-
-.denied{
-    color:#ff3b3b;
-}
-</style>
-</head>
-
-<body>
-
-<div class="container">
-
-<h1>ARSI FITNESS GYM</h1>
-<p>Scan Wall QR → Then Member QR</p>
-
-<div id="reader"></div>
-<div id="result" class="result"></div>
-
-</div>
-
 <script>
 
-// 🔴 REPLACE THIS WITH YOUR RENDER BACKEND URL
 const API = "https://YOUR-RENDER-APP.onrender.com/api/mobile-qr-check-in";
 
 let wallVerified = false;
+let scannerRunning = true;
 
-function showMessage(message, type){
+function showMessage(msg, type){
+    const box = document.getElementById("result");
+    box.className = "result " + type;
+    box.innerText = msg;
+}
 
-    const resultBox = document.getElementById("result");
-    resultBox.className = "result " + type;
-    resultBox.innerText = message;
-
-    setTimeout(()=>{
-        resultBox.innerText="";
-        wallVerified=false;
-    },3000);
+function resetScanner(){
+    wallVerified = false;
+    showMessage("", "");
+    scanner.resume();
 }
 
 function onScanSuccess(decodedText){
 
-    console.log("Scanned:", decodedText);
+    if(!scannerRunning) return;
 
-    // STEP 1: WALL QR
+    scannerRunning = false;  // prevent multiple scans
+    scanner.pause();
+
+    // STEP 1 — WALL QR
     if(!wallVerified){
 
         if(decodedText === "1234"){
             wallVerified = true;
             showMessage("Wall Verified ✅ Now Scan Member QR", "granted");
-        }else{
+
+            setTimeout(()=>{
+                scannerRunning = true;
+                scanner.resume();
+            },1500);
+
+        } else {
             showMessage("Invalid Wall QR ❌", "denied");
+
+            setTimeout(()=>{
+                scannerRunning = true;
+                scanner.resume();
+            },2000);
         }
+
         return;
     }
 
-    // STEP 2: SEND MEMBER TOKEN TO FLASK
+    // STEP 2 — MEMBER QR
     fetch(API,{
         method:"POST",
-        headers:{
-            "Content-Type":"application/json"
-        },
+        headers:{ "Content-Type":"application/json" },
         body:JSON.stringify({
             wall_code:"1234",
             qr_token:decodedText
         })
     })
-    .then(response=>{
-        if(!response.ok){
-            throw new Error("Server response not OK");
-        }
-        return response.json();
-    })
+    .then(res=>res.json())
     .then(data=>{
-        console.log("Server:", data);
 
         if(data.status==="granted"){
             showMessage("ACCESS GRANTED ✅", "granted");
-        }else{
+        } else {
             showMessage("ACCESS DENIED ❌", "denied");
         }
 
-        wallVerified=false;
+        setTimeout(()=>{
+            scannerRunning = true;
+            resetScanner();
+        },3000);
     })
-    .catch(error=>{
-        console.log("Fetch Error:", error);
+    .catch(()=>{
         showMessage("SERVER ERROR ❌", "denied");
-        wallVerified=false;
+
+        setTimeout(()=>{
+            scannerRunning = true;
+            resetScanner();
+        },3000);
     });
 }
 
@@ -130,11 +87,6 @@ scanner.start(
     { facingMode: "environment" },
     { fps: 10, qrbox: 250 },
     onScanSuccess
-).catch(err=>{
-    console.log("Camera Error:", err);
-});
+);
 
 </script>
-
-</body>
-</html>
