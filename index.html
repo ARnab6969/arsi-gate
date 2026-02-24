@@ -1,11 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arsi Gym Access</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        :root { --primary: #ff9800; --bg: #0f0f0f; --card: #1a1a1a; --text: #ffffff; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { background: var(--card); width: 90%; max-width: 400px; padding: 30px; border-radius: 24px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { font-weight: 800; color: var(--primary); margin-bottom: 5px; }
+        .status-badge { background: rgba(255,152,0,0.1); color: var(--primary); padding: 8px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; }
+        .btn { background: var(--primary); color: #000; border: none; padding: 16px; border-radius: 12px; width: 100%; font-weight: 800; cursor: pointer; }
+        #video-container { width: 100%; aspect-ratio: 1; margin-top: 20px; border-radius: 20px; overflow: hidden; display: none; border: 2px solid var(--primary); }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        #status-text { margin-top: 15px; font-size: 0.9rem; font-weight: 600; color: var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>ARSI GYM</h1>
+    <div class="status-badge">SECURE ACCESS</div>
+    
+    <div id="loading-msg">Initializing Session...</div>
+
+    <div id="scan-section" style="display:none;">
+        <div id="video-container"><video id="preview" playsinline></video></div>
+        <button id="scanBtn" class="btn" onclick="startScanner()">OPEN CAMERA TO SCAN</button>
+        <p id="status-text">Ready to scan QR: 1234</p>
+    </div>
+</div>
+
 <script>
     const video = document.getElementById('preview');
     const RENDER_BRIDGE_URL = "https://arsi-bridge.onrender.com";
     
+    // Catch token from URL
     const urlParams = new URLSearchParams(window.location.search);
     const activeToken = urlParams.get('token');
 
-    // ... (keep the loading logic from before) ...
+    // Check if token exists
+    if (activeToken) {
+        document.getElementById('loading-msg').style.display = 'none';
+        document.getElementById('scan-section').style.display = 'block';
+    } else {
+        document.getElementById('loading-msg').innerHTML = "<span style='color:red'>Error: Invalid Session.<br>Please login via Gym WiFi first.</span>";
+    }
+
+    function startScanner() {
+        document.getElementById('video-container').style.display = 'block';
+        document.getElementById('scanBtn').style.display = 'none';
+        
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => {
+                video.srcObject = stream;
+                video.setAttribute("playsinline", true);
+                video.play();
+                requestAnimationFrame(tick);
+            })
+            .catch(err => {
+                alert("Camera Error: Please allow camera access in browser settings.");
+            });
+    }
 
     function tick() {
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
@@ -18,13 +76,12 @@
             const code = jsQR(imageData.data, imageData.width, imageData.height);
 
             if (code) {
-                console.log("Found QR:", code.data);
-                // CHECK FOR 1234
+                // Check if the QR matches your new "1234" code
                 if (code.data === "1234") {
                     sendToBridge(code.data);
-                    return; // Stop scanning once found
+                    return; // Stop the loop on match
                 } else {
-                    document.getElementById('status-text').innerText = "Invalid QR: " + code.data;
+                    document.getElementById('status-text').innerText = "Wrong QR. Looking for '1234'.";
                 }
             }
         }
@@ -32,7 +89,7 @@
     }
 
     function sendToBridge(wallContent) {
-        document.getElementById('status-text').innerText = "Sending to Bridge...";
+        document.getElementById('status-text').innerText = "Unlocking Gate...";
         
         fetch(`${RENDER_BRIDGE_URL}/api/mobile-scan-wall`, {
             method: 'POST',
@@ -44,12 +101,13 @@
         })
         .then(res => res.json())
         .then(data => {
-            alert("Success: " + data.message);
-            document.getElementById('status-text').innerText = "✅ Door Unlocked!";
+            alert("ACCESS GRANTED: " + data.message);
+            location.reload(); 
         })
         .catch(err => {
-            alert("Bridge Error: " + err);
-            document.getElementById('status-text').innerText = "❌ Connection Failed";
+            alert("Bridge Connection Failed. Is Render Online?");
         });
     }
 </script>
+</body>
+</html>
