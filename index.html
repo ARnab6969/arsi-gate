@@ -1,78 +1,128 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>ARSI Scanner</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ARSI GYM - SCANNER</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { background: #000; color: white; text-align: center; font-family: sans-serif; }
-        #video-container { width: 90%; max-width: 400px; margin: 20px auto; border: 2px solid #ff9800; border-radius: 20px; overflow: hidden; }
-        video { width: 100%; }
-        .status { font-size: 1.2rem; margin-top: 20px; color: #ff9800; }
+        :root { --primary: #ff9800; --success: #4caf50; --error: #f44336; --bg: #000000; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); font-family: -apple-system, sans-serif; overflow: hidden; color: white; }
+        
+        /* Camera Background */
+        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Scanner UI Overlay */
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+        
+        /* The Scanner Frame */
+        .scan-region { width: 260px; height: 260px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 40px; position: relative; box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.6); }
+        .scan-region::before { content: ""; position: absolute; top: -2px; left: -2px; width: 40px; height: 40px; border-top: 5px solid var(--primary); border-left: 5px solid var(--primary); border-top-left-radius: 40px; }
+        .scan-region::after { content: ""; position: absolute; bottom: -2px; right: -2px; width: 40px; height: 40px; border-bottom: 5px solid var(--primary); border-right: 5px solid var(--primary); border-bottom-right-radius: 40px; }
+        
+        /* Laser Animation */
+        .laser { position: absolute; top: 0; left: 5%; width: 90%; height: 2px; background: var(--primary); box-shadow: 0 0 15px var(--primary); animation: scan 2s infinite linear; }
+        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
+
+        /* Text UI */
+        .instruction { position: absolute; bottom: 80px; width: 100%; text-align: center; color: white; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+
+        /* Full Screen Alerts */
+        #result-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: all; }
+        .success { background: var(--success); }
+        .denied { background: var(--error); }
+        .result-icon { font-size: 80px; margin-bottom: 20px; }
+        .result-text { font-size: 24px; font-weight: 800; }
     </style>
 </head>
 <body>
-    <h1>SCAN WALL QR</h1>
-    <div id="video-container"><video id="preview" playsinline></video></div>
-    <div id="status" class="status">Initializing Camera...</div>
+
+    <div id="video-container">
+        <video id="preview" playsinline></video>
+    </div>
+
+    <div class="overlay">
+        <div class="scan-region">
+            <div class="laser"></div>
+        </div>
+        <div class="instruction">ALIGN QR CODE "1234" WITHIN FRAME</div>
+    </div>
+
+    <div id="result-screen">
+        <div class="result-icon" id="icon"></div>
+        <div class="result-text" id="msg"></div>
+    </div>
 
     <script>
         const video = document.getElementById('preview');
-        const statusDiv = document.getElementById('status');
-        const RENDER_URL = "https://arsi-bridge.onrender.com";
+        const resScreen = document.getElementById('result-screen');
+        const resIcon = document.getElementById('icon');
+        const resMsg = document.getElementById('msg');
         
-        // Get token from the URL sent by your laptop
         const urlParams = new URLSearchParams(window.location.search);
-        const activeToken = urlParams.get('token');
+        const token = urlParams.get('token');
 
-        if (!activeToken) {
-            statusDiv.innerText = "Error: No Token. Please login at the gym.";
-        } else {
-            startCamera();
+        if (!token) {
+            alert("Security Error: No Token Found. Please login again.");
+            window.location.href = "http://10.156.206.54:5000/member-login"; 
         }
 
-        function startCamera() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                .then(stream => {
-                    video.srcObject = stream;
-                    video.play();
-                    statusDiv.innerText = "Align QR Code '1234' to enter";
-                    requestAnimationFrame(tick);
-                });
-        }
+        // Start Camera
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => {
+                video.srcObject = stream;
+                video.play();
+                requestAnimationFrame(tick);
+            });
 
         function tick() {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 const canvas = document.createElement("canvas");
-                canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
                 const ctx = canvas.getContext("2d");
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const code = jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
 
                 if (code && code.data === "1234") {
-                    sendToBridge();
-                    return;
+                    handleScan();
+                    return; // Stop scanning
                 }
             }
             requestAnimationFrame(tick);
         }
 
-        function sendToBridge() {
-            statusDiv.innerText = "Verifying Access...";
-            fetch(`${RENDER_URL}/api/mobile-scan-wall`, {
+        function handleScan() {
+            // Vibrate phone on scan (Android)
+            if (navigator.vibrate) navigator.vibrate(100);
+
+            fetch(`https://arsi-bridge.onrender.com/api/mobile-scan-wall`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ token: activeToken, qr_content: "1234" })
+                body: JSON.stringify({ token: token, qr_content: "1234" })
             })
-            .then(res => res.json())
-            .then(data => {
-                statusDiv.style.color = "#00ff00";
-                statusDiv.innerText = "✅ ACCESS GRANTED!";
-                setTimeout(() => { window.location.href = "about:blank"; }, 2000);
-            })
-            .catch(err => {
-                statusDiv.style.color = "#ff0000";
-                statusDiv.innerText = "❌ ACCESS DENIED";
-            });
+            .then(res => res.status === 200 ? showResult(true) : showResult(false))
+            .catch(() => showResult(false));
+        }
+
+        function showResult(isSuccess) {
+            resScreen.style.display = 'flex';
+            if (isSuccess) {
+                resScreen.className = 'success';
+                resIcon.innerText = "✅";
+                resMsg.innerText = "ACCESS GRANTED";
+                // REDIRECT TO HOME (Laptop Portal) after 2 seconds
+                setTimeout(() => {
+                    window.location.href = "http://10.156.206.54:5000/member-login";
+                }, 2000);
+            } else {
+                resScreen.className = 'denied';
+                resIcon.innerText = "❌";
+                resMsg.innerText = "ACCESS DENIED";
+                setTimeout(() => location.reload(), 2000);
+            }
         }
     </script>
 </body>
