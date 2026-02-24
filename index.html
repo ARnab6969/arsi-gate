@@ -1,92 +1,119 @@
-<script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arsi Fitness - Member Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        .hidden { display: none; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-zinc-900 min-h-screen flex items-center justify-center p-4">
 
-const API = "https://YOUR-RENDER-APP.onrender.com/api/mobile-qr-check-in";
+    <div id="login-section" class="glass p-8 rounded-2xl shadow-2xl w-full max-w-md">
+        <h1 class="text-3xl font-bold text-center text-zinc-800 mb-6">Arsi Fitness Login</h1>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Username</label>
+                <input type="text" id="username" class="mt-1 block w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Password</label>
+                <input type="password" id="password" class="mt-1 block w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+            </div>
+            <button onclick="handleLogin()" id="login-btn" class="w-full bg-zinc-900 text-white font-bold py-3 rounded-lg hover:bg-zinc-800 transition-colors">
+                SIGN IN
+            </button>
+            <p id="error-msg" class="text-red-500 text-sm text-center mt-2 hidden"></p>
+        </div>
+    </div>
 
-let wallVerified = false;
-let scannerRunning = true;
+    <div id="dashboard-section" class="hidden glass p-8 rounded-2xl shadow-2xl w-full max-w-md text-center">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-zinc-800">Welcome, <span id="member-name" class="text-blue-600"></span></h2>
+            <button onclick="logout()" class="text-sm text-red-500 font-semibold">Logout</button>
+        </div>
 
-function showMessage(msg, type){
-    const box = document.getElementById("result");
-    box.className = "result " + type;
-    box.innerText = msg;
-}
+        <div class="bg-white p-4 rounded-xl shadow-inner inline-block mb-4">
+            <div id="qrcode"></div>
+        </div>
+        
+        <p class="text-gray-600 text-sm mb-4">Scan this code at the gym entrance</p>
 
-function resetScanner(){
-    wallVerified = false;
-    showMessage("", "");
-    scanner.resume();
-}
+        <div class="bg-zinc-100 p-4 rounded-lg">
+            <p class="text-sm text-gray-500 uppercase tracking-wider font-semibold">Days Remaining</p>
+            <p id="days-left" class="text-4xl font-black text-zinc-800"></p>
+        </div>
+    </div>
 
-function onScanSuccess(decodedText){
+    <script>
+        // Set this to your Flask Server URL (e.g., http://your-ip:5000)
+        const API_BASE = ""; 
 
-    if(!scannerRunning) return;
+        document.addEventListener("DOMContentLoaded", () => {
+            const savedMember = localStorage.getItem("arsi_member");
+            if (savedMember) showDashboard(JSON.parse(savedMember));
+        });
 
-    scannerRunning = false;  // prevent multiple scans
-    scanner.pause();
+        async function handleLogin() {
+            const user = document.getElementById("username").value;
+            const pass = document.getElementById("password").value;
+            const errorEl = document.getElementById("error-msg");
+            const btn = document.getElementById("login-btn");
 
-    // STEP 1 — WALL QR
-    if(!wallVerified){
+            errorEl.classList.add("hidden");
+            btn.innerText = "Authenticating...";
 
-        if(decodedText === "1234"){
-            wallVerified = true;
-            showMessage("Wall Verified ✅ Now Scan Member QR", "granted");
+            try {
+                const response = await fetch(`${API_BASE}/api/member-login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
 
-            setTimeout(()=>{
-                scannerRunning = true;
-                scanner.resume();
-            },1500);
+                const data = await response.json();
 
-        } else {
-            showMessage("Invalid Wall QR ❌", "denied");
-
-            setTimeout(()=>{
-                scannerRunning = true;
-                scanner.resume();
-            },2000);
+                if (response.ok) {
+                    localStorage.setItem("arsi_member", JSON.stringify(data));
+                    showDashboard(data);
+                } else {
+                    errorEl.innerText = data.message || "Login failed";
+                    errorEl.classList.remove("hidden");
+                }
+            } catch (err) {
+                errorEl.innerText = "Server connection error";
+                errorEl.classList.remove("hidden");
+            } finally {
+                btn.innerText = "SIGN IN";
+            }
         }
 
-        return;
-    }
+        function showDashboard(data) {
+            document.getElementById("login-section").classList.add("hidden");
+            document.getElementById("dashboard-section").classList.remove("hidden");
+            
+            document.getElementById("member-name").innerText = data.name;
+            document.getElementById("days-left").innerText = data.remaining_days;
 
-    // STEP 2 — MEMBER QR
-    fetch(API,{
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({
-            wall_code:"1234",
-            qr_token:decodedText
-        })
-    })
-    .then(res=>res.json())
-    .then(data=>{
-
-        if(data.status==="granted"){
-            showMessage("ACCESS GRANTED ✅", "granted");
-        } else {
-            showMessage("ACCESS DENIED ❌", "denied");
+            // Generate QR Code using the token from your Flask API
+            document.getElementById("qrcode").innerHTML = "";
+            new QRCode(document.getElementById("qrcode"), {
+                text: data.qr_token,
+                width: 200,
+                height: 200,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
         }
 
-        setTimeout(()=>{
-            scannerRunning = true;
-            resetScanner();
-        },3000);
-    })
-    .catch(()=>{
-        showMessage("SERVER ERROR ❌", "denied");
-
-        setTimeout(()=>{
-            scannerRunning = true;
-            resetScanner();
-        },3000);
-    });
-}
-
-const scanner = new Html5Qrcode("reader");
-
-scanner.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    onScanSuccess
-);
-
-</script>
+        function logout() {
+            localStorage.removeItem("arsi_member");
+            location.reload();
+        }
+    </script>
+</body>
+</html>
