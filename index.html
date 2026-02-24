@@ -2,128 +2,87 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ARSI GYM - SCANNER</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARSI GATE | Remote Control</title>
     <style>
-        :root { --primary: #ff9800; --success: #4caf50; --error: #f44336; --bg: #000000; }
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); font-family: -apple-system, sans-serif; overflow: hidden; color: white; }
-        
-        /* Camera Background */
-        #video-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-        video { width: 100%; height: 100%; object-fit: cover; }
-
-        /* Scanner UI Overlay */
-        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
-        
-        /* The Scanner Frame */
-        .scan-region { width: 260px; height: 260px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 40px; position: relative; box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.6); }
-        .scan-region::before { content: ""; position: absolute; top: -2px; left: -2px; width: 40px; height: 40px; border-top: 5px solid var(--primary); border-left: 5px solid var(--primary); border-top-left-radius: 40px; }
-        .scan-region::after { content: ""; position: absolute; bottom: -2px; right: -2px; width: 40px; height: 40px; border-bottom: 5px solid var(--primary); border-right: 5px solid var(--primary); border-bottom-right-radius: 40px; }
-        
-        /* Laser Animation */
-        .laser { position: absolute; top: 0; left: 5%; width: 90%; height: 2px; background: var(--primary); box-shadow: 0 0 15px var(--primary); animation: scan 2s infinite linear; }
-        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
-
-        /* Text UI */
-        .instruction { position: absolute; bottom: 80px; width: 100%; text-align: center; color: white; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-
-        /* Full Screen Alerts */
-        #result-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: all; }
-        .success { background: var(--success); }
-        .denied { background: var(--error); }
-        .result-icon { font-size: 80px; margin-bottom: 20px; }
-        .result-text { font-size: 24px; font-weight: 800; }
+        body { font-family: 'Inter', sans-serif; background: #000; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
+        .gate-card { background: #111; padding: 2.5rem; border-radius: 30px; text-align: center; border: 2px solid #333; width: 85%; max-width: 350px; }
+        .unlock-btn { width: 150px; height: 150px; border-radius: 50%; border: none; background: #ef4444; color: white; font-size: 1.2rem; font-weight: bold; cursor: pointer; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); transition: 0.3s; margin: 20px 0; }
+        .unlock-btn.active { background: #22c55e; box-shadow: 0 0 30px rgba(34, 197, 94, 0.6); transform: scale(0.95); }
+        .status-text { margin-top: 10px; font-size: 0.9rem; color: #666; }
+        .member-info { font-size: 0.8rem; color: #4ade80; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
 <body>
 
-    <div id="video-container">
-        <video id="preview" playsinline></video>
-    </div>
+<div class="gate-card">
+    <div id="member-display" class="member-info">Verifying Access...</div>
+    <button id="gateBtn" class="unlock-btn" onclick="triggerGate()">PRESS TO<br>UNLOCK</button>
+    <div id="status" class="status-text">Standby Mode</div>
+</div>
 
-    <div class="overlay">
-        <div class="scan-region">
-            <div class="laser"></div>
-        </div>
-        <div class="instruction">ALIGN QR CODE "1234" WITHIN FRAME</div>
-    </div>
+<script>
+    // 1. GRAB DATA FROM URL (The stuff passed from your Flask Login)
+    const urlParams = new URLSearchParams(window.location.search);
+    const memberId = urlParams.get('member_id');
+    const secretToken = urlParams.get('secret_token'); // This is your '1234'
 
-    <div id="result-screen">
-        <div class="result-icon" id="icon"></div>
-        <div class="result-text" id="msg"></div>
-    </div>
+    // 2. CHECK IF DATA EXISTS
+    if (!memberId || !secretToken) {
+        document.getElementById('member-display').innerHTML = "SECURITY ERROR: NO TOKEN";
+        document.getElementById('member-display').style.color = "red";
+        document.getElementById('gateBtn').disabled = true;
+        document.getElementById('gateBtn').style.background = "#333";
+    } else {
+        document.getElementById('member-display').innerHTML = "MEMBER ID: " + memberId + " | AUTH SYNCED";
+    }
 
-    <script>
-        const video = document.getElementById('preview');
-        const resScreen = document.getElementById('result-screen');
-        const resIcon = document.getElementById('icon');
-        const resMsg = document.getElementById('msg');
+    // 3. TRIGGER THE GATE
+    function triggerGate() {
+        const btn = document.getElementById('gateBtn');
+        const status = document.getElementById('status');
         
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token');
+        btn.classList.add('active');
+        btn.innerHTML = "OPENING...";
+        status.innerHTML = "Sending signal to Gym Server...";
 
-        if (!token) {
-            alert("Security Error: No Token Found. Please login again.");
-            window.location.href = "http://10.156.206.54:5000/member-login"; 
-        }
-
-        // Start Camera
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-            .then(stream => {
-                video.srcObject = stream;
-                video.play();
-                requestAnimationFrame(tick);
-            });
-
-        function tick() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                const canvas = document.createElement("canvas");
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const ctx = canvas.getContext("2d");
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-                if (code && code.data === "1234") {
-                    handleScan();
-                    return; // Stop scanning
-                }
-            }
-            requestAnimationFrame(tick);
-        }
-
-        function handleScan() {
-            // Vibrate phone on scan (Android)
-            if (navigator.vibrate) navigator.vibrate(100);
-
-            fetch(`https://arsi-bridge.onrender.com/api/mobile-scan-wall`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ token: token, qr_content: "1234" })
+        // Replace 'YOUR_LOCAL_IP' with the actual IP of your Gym Computer
+        // For example: http://192.168.1.5:5000/api/mobile-qr-check-in
+        fetch('http://localhost:5000/api/mobile-qr-check-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                member_id: memberId,
+                secret_token: secretToken
             })
-            .then(res => res.status === 200 ? showResult(true) : showResult(false))
-            .catch(() => showResult(false));
-        }
-
-        function showResult(isSuccess) {
-            resScreen.style.display = 'flex';
-            if (isSuccess) {
-                resScreen.className = 'success';
-                resIcon.innerText = "✅";
-                resMsg.innerText = "ACCESS GRANTED";
-                // REDIRECT TO HOME (Laptop Portal) after 2 seconds
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'granted') {
+                status.innerHTML = "ACCESS GRANTED!";
                 setTimeout(() => {
-                    window.location.href = "http://10.156.206.54:5000/member-login";
-                }, 2000);
+                    btn.classList.remove('active');
+                    btn.innerHTML = "PRESS TO<br>UNLOCK";
+                    status.innerHTML = "Standby Mode";
+                }, 3000);
             } else {
-                resScreen.className = 'denied';
-                resIcon.innerText = "❌";
-                resMsg.innerText = "ACCESS DENIED";
-                setTimeout(() => location.reload(), 2000);
+                alert("Denied: " + data.message);
+                resetBtn();
             }
-        }
-    </script>
+        })
+        .catch(error => {
+            alert("Connection Error! Is the Gym PC Server running?");
+            resetBtn();
+        });
+    }
+
+    function resetBtn() {
+        const btn = document.getElementById('gateBtn');
+        btn.classList.remove('active');
+        btn.innerHTML = "PRESS TO<br>UNLOCK";
+        document.getElementById('status').innerHTML = "Connection Failed";
+    }
+</script>
+
 </body>
 </html>
