@@ -3,117 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arsi Fitness - Member Portal</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <title>Arsi Gym - Scan & Enter</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    
     <style>
-        .hidden { display: none; }
-        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        :root { --neon-green: #00ff99; --dark-bg: #111; }
+        body {
+            margin: 0;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            font-family: Arial, sans-serif;
+            color: white;
+            display: flex; justify-content: center; align-items: center; min-height: 100vh;
+        }
+        .card {
+            width: 90%; max-width: 400px; background: var(--dark-bg);
+            padding: 30px; border-radius: 20px; text-align: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        input {
+            width: 100%; padding: 12px; margin-top: 12px; border: none;
+            border-radius: 8px; background: #222; color: white; text-align: center;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%; padding: 12px; margin-top: 15px; border: none;
+            border-radius: 8px; background: var(--neon-green); color: black;
+            font-weight: bold; cursor: pointer;
+        }
+        #reader { width: 100%; margin-top: 15px; border-radius: 10px; overflow: hidden; display: none; }
+        #welcomeBox { display: none; }
+        .error { color: #ff4d4d; margin-top: 10px; font-size: 14px; }
     </style>
 </head>
-<body class="bg-zinc-900 min-h-screen flex items-center justify-center p-4">
+<body>
 
-    <div id="login-section" class="glass p-8 rounded-2xl shadow-2xl w-full max-w-md">
-        <h1 class="text-3xl font-bold text-center text-zinc-800 mb-6">Arsi Fitness Login</h1>
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Username</label>
-                <input type="text" id="username" class="mt-1 block w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Password</label>
-                <input type="password" id="password" class="mt-1 block w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
-            </div>
-            <button onclick="handleLogin()" id="login-btn" class="w-full bg-zinc-900 text-white font-bold py-3 rounded-lg hover:bg-zinc-800 transition-colors">
-                SIGN IN
-            </button>
-            <p id="error-msg" class="text-red-500 text-sm text-center mt-2 hidden"></p>
-        </div>
+<div class="card">
+    <div id="loginBox">
+        <h1 style="color:var(--neon-green)">ARSI FITNESS</h1>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="login()">Login</button>
+        <div id="error" class="error"></div>
     </div>
 
-    <div id="dashboard-section" class="hidden glass p-8 rounded-2xl shadow-2xl w-full max-w-md text-center">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-bold text-zinc-800">Welcome, <span id="member-name" class="text-blue-600"></span></h2>
-            <button onclick="logout()" class="text-sm text-red-500 font-semibold">Logout</button>
-        </div>
-
-        <div class="bg-white p-4 rounded-xl shadow-inner inline-block mb-4">
-            <div id="qrcode"></div>
-        </div>
+    <div id="welcomeBox">
+        <h2 id="greet" style="color:var(--neon-green)"></h2>
+        <p id="remaining"></p>
         
-        <p class="text-gray-600 text-sm mb-4">Scan this code at the gym entrance</p>
-
-        <div class="bg-zinc-100 p-4 rounded-lg">
-            <p class="text-sm text-gray-500 uppercase tracking-wider font-semibold">Days Remaining</p>
-            <p id="days-left" class="text-4xl font-black text-zinc-800"></p>
-        </div>
+        <div id="reader"></div>
+        
+        <button id="scanBtn" onclick="startScanner()">Open Camera to Enter</button>
+        <button onclick="location.reload()" style="background:#333; color:white">Logout</button>
     </div>
+</div>
 
-    <script>
-        // Set this to your Flask Server URL (e.g., http://your-ip:5000)
-        const API_BASE = ""; 
+<script>
+    // 1. CHANGE THIS to your Flask Server Public URL or Local IP
+    const API_URL = "http://127.0.0.1:5000"; 
+    
+    let memberData = null;
+    let html5QrCode = null;
 
-        document.addEventListener("DOMContentLoaded", () => {
-            const savedMember = localStorage.getItem("arsi_member");
-            if (savedMember) showDashboard(JSON.parse(savedMember));
-        });
+    async function login() {
+        const user = document.getElementById("username").value;
+        const pass = document.getElementById("password").value;
 
-        async function handleLogin() {
-            const user = document.getElementById("username").value;
-            const pass = document.getElementById("password").value;
-            const errorEl = document.getElementById("error-msg");
-            const btn = document.getElementById("login-btn");
-
-            errorEl.classList.add("hidden");
-            btn.innerText = "Authenticating...";
-
-            try {
-                const response = await fetch(`${API_BASE}/api/member-login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username: user, password: pass })
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    localStorage.setItem("arsi_member", JSON.stringify(data));
-                    showDashboard(data);
-                } else {
-                    errorEl.innerText = data.message || "Login failed";
-                    errorEl.classList.remove("hidden");
-                }
-            } catch (err) {
-                errorEl.innerText = "Server connection error";
-                errorEl.classList.remove("hidden");
-            } finally {
-                btn.innerText = "SIGN IN";
-            }
-        }
-
-        function showDashboard(data) {
-            document.getElementById("login-section").classList.add("hidden");
-            document.getElementById("dashboard-section").classList.remove("hidden");
-            
-            document.getElementById("member-name").innerText = data.name;
-            document.getElementById("days-left").innerText = data.remaining_days;
-
-            // Generate QR Code using the token from your Flask API
-            document.getElementById("qrcode").innerHTML = "";
-            new QRCode(document.getElementById("qrcode"), {
-                text: data.qr_token,
-                width: 200,
-                height: 200,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.H
+        try {
+            const res = await fetch(`${API_URL}/api/member-login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: user, password: pass })
             });
-        }
+            const data = await res.json();
 
-        function logout() {
-            localStorage.removeItem("arsi_member");
+            if (data.status === "success") {
+                memberData = data;
+                document.getElementById("loginBox").style.display = "none";
+                document.getElementById("welcomeBox").style.display = "block";
+                document.getElementById("greet").innerText = "Welcome, " + data.name;
+                document.getElementById("remaining").innerText = "Days Left: " + data.remaining_days;
+            } else {
+                document.getElementById("error").innerText = data.message;
+            }
+        } catch (err) {
+            document.getElementById("error").innerText = "Server connection error!";
+        }
+    }
+
+    function startScanner() {
+        document.getElementById("reader").style.display = "block";
+        document.getElementById("scanBtn").style.display = "none";
+        
+        html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+    }
+
+    async function onScanSuccess(decodedText) {
+        // decodedText is the "Universal Gym QR" (e.g., "1234")
+        html5QrCode.stop();
+        document.getElementById("reader").innerText = "Processing Access...";
+
+        try {
+            const res = await fetch(`${API_URL}/api/mobile-qr-check-in`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    wall_code: decodedText, // The scanned QR code
+                    qr_token: memberData.qr_token // The member's unique token
+                })
+            });
+            const result = await res.json();
+
+            if (result.status === "granted") {
+                alert("Access Granted! Door Unlocking...");
+                location.reload(); // Return to home page/login
+            } else {
+                alert("Access Denied: " + (result.reason || "Invalid QR"));
+                location.reload();
+            }
+        } catch (err) {
+            alert("Error connecting to Gym Server");
             location.reload();
         }
-    </script>
+    }
+</script>
 </body>
 </html>
