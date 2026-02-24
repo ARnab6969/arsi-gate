@@ -3,112 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Arsi Gym Entry</title>
+    <title>Gym Entry Scanner</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        :root {
-            --neon: #00ff99;
-            --bg: #0a0a0a;
-            --card: #1a1a1a;
-        }
-
+        :root { --neon: #00ff99; --bg: #000000; }
         body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg);
-            color: white;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
+            margin: 0; background: var(--bg); color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica;
+            display: flex; flex-direction: column; align-items: center; height: 100vh;
         }
-
-        .header {
-            margin-top: 40px;
-            text-align: center;
-            z-index: 10;
-        }
-
-        .header h1 {
-            margin: 0;
-            font-size: 28px;
-            letter-spacing: 2px;
-            color: var(--neon);
-            text-shadow: 0 0 10px rgba(0, 255, 153, 0.3);
-        }
-
-        .header p {
-            font-size: 14px;
-            color: #888;
-            margin-top: 5px;
-        }
-
-        #scanner-container {
-            position: relative;
-            width: 85%;
-            max-width: 350px;
-            margin-top: 30px;
-            border-radius: 24px;
-            overflow: hidden;
-            border: 2px solid #333;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        }
-
+        .header { margin-top: 30px; text-align: center; }
+        .header h1 { color: var(--neon); font-size: 24px; letter-spacing: 2px; margin: 0; }
+        
         #reader {
-            width: 100%;
-            background: black;
+            width: 90%; max-width: 400px;
+            margin-top: 20px; border-radius: 20px;
+            border: 2px solid #222; overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 255, 153, 0.2);
         }
 
-        /* Scan Overlay Animation */
-        .scan-line {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: var(--neon);
-            box-shadow: 0 0 15px var(--neon);
-            animation: scan 2s infinite linear;
-            z-index: 5;
-            display: none;
+        .status-container {
+            margin-top: 30px; width: 85%; padding: 20px;
+            background: #111; border-radius: 15px; text-align: center;
         }
-
-        @keyframes scan {
-            0% { top: 0%; }
-            100% { top: 100%; }
-        }
-
-        .status-box {
-            margin-top: 30px;
-            width: 80%;
-            padding: 20px;
-            border-radius: 15px;
-            background: var(--card);
-            text-align: center;
-            border: 1px solid #333;
-        }
-
-        #status-text {
-            font-weight: 600;
-            font-size: 16px;
-            color: #ccc;
-        }
-
-        .success-msg { color: var(--neon) !important; }
-        .error-msg { color: #ff4d4d !important; }
-
-        .btn-retry {
-            margin-top: 15px;
-            padding: 10px 25px;
-            background: transparent;
-            border: 1px solid var(--neon);
-            color: var(--neon);
-            border-radius: 50px;
-            font-size: 14px;
-            display: none;
-            cursor: pointer;
+        #status-text { font-size: 16px; font-weight: bold; color: #888; }
+        .success { color: var(--neon) !important; }
+        .error { color: #ff4d4d !important; }
+        
+        .nav-home {
+            margin-top: 20px; color: #555; text-decoration: none; font-size: 14px;
         }
     </style>
 </head>
@@ -116,88 +39,69 @@
 
     <div class="header">
         <h1>ARSI FITNESS</h1>
-        <p>Scan Wall QR to Unlock Door</p>
+        <p style="color: #666;">Scan Wall QR to Open Door</p>
     </div>
 
-    <div id="scanner-container">
-        <div class="scan-line" id="line"></div>
-        <div id="reader"></div>
+    <div id="reader"></div>
+
+    <div class="status-container">
+        <div id="status-text">Ready to scan...</div>
     </div>
 
-    <div class="status-box">
-        <div id="status-text">Align QR code within the frame</div>
-        <button class="btn-retry" id="retryBtn" onclick="location.reload()">Try Again</button>
-    </div>
+    <a href="index.html" class="nav-home">Refresh Scanner</a>
 
     <script>
-        // --- CONFIGURATION ---
-        const SERVER_IP = "10.156.206.54"; // Your Laptop's Network IP
+        // --- CONFIG ---
+        // Verify this matches your laptop's current IP
+        const SERVER_IP = "10.156.206.54"; 
         const FLASK_URL = `http://${SERVER_IP}:5000`;
         
-        // PASTE your specific member QR Token from the database here
-        // (In the final version, this is usually stored in localStorage after login)
-        const MY_TOKEN = "YOUR_MEMBER_QR_TOKEN_HERE"; 
+        // PASTE YOUR MEMBER TOKEN HERE (from gym.db)
+        const MY_TOKEN = "PASTE_YOUR_QR_TOKEN_HERE"; 
 
         const statusText = document.getElementById("status-text");
-        const scanLine = document.getElementById("line");
-        const retryBtn = document.getElementById("retryBtn");
 
         function onScanSuccess(decodedText) {
-            // 1. Stop scanner and show processing
+            // decodedText is the code from the wall (e.g., "WALL_01")
             html5QrCode.stop();
-            scanLine.style.display = "none";
-            statusText.innerText = "Verifying Access...";
+            statusText.innerText = "Processing Access...";
             statusText.className = "";
 
-            // 2. Send to Flask Backend
             fetch(`${FLASK_URL}/api/mobile-qr-check-in`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                mode: 'cors', // Crucial for cross-device
                 body: JSON.stringify({
-                    wall_code: decodedText, 
+                    wall_code: decodedText,
                     qr_token: MY_TOKEN
                 })
             })
             .then(res => res.json())
             .then(data => {
                 if(data.status === "granted") {
-                    statusText.innerText = "ACCESS GRANTED! WELCOME.";
-                    statusText.classList.add("success-msg");
-                    // Feedback vibration (if supported)
-                    if (navigator.vibrate) navigator.vibrate([100, 30, 100]);
-                    
-                    setTimeout(() => { location.reload(); }, 4000);
+                    statusText.innerText = "ACCESS GRANTED! UNLOCKING...";
+                    statusText.classList.add("success");
+                    setTimeout(() => { location.reload(); }, 3000);
                 } else {
-                    statusText.innerText = "DENIED: " + (data.reason || "Invalid Member");
-                    statusText.classList.add("error-msg");
-                    retryBtn.style.display = "inline-block";
+                    statusText.innerText = "DENIED: " + (data.reason || "Invalid");
+                    statusText.classList.add("error");
+                    setTimeout(() => { location.reload(); }, 3000);
                 }
             })
             .catch(err => {
-                statusText.innerText = "Connection Error! Check Wi-Fi.";
-                statusText.classList.add("error-msg");
-                retryBtn.style.display = "inline-block";
+                statusText.innerText = "SERVER ERROR: Check Wi-Fi Connection";
+                statusText.classList.add("error");
                 console.error(err);
             });
         }
 
         const html5QrCode = new Html5Qrcode("reader");
-        const config = { 
-            fps: 20, 
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0 
-        };
-
-        // Start Camera
         html5QrCode.start(
             { facingMode: "environment" }, 
-            config, 
+            { fps: 15, qrbox: { width: 250, height: 250 } },
             onScanSuccess
-        ).then(() => {
-            scanLine.style.display = "block";
-        }).catch(err => {
-            statusText.innerText = "Camera Error: Please allow permissions.";
-            statusText.classList.add("error-msg");
+        ).catch(err => {
+            statusText.innerText = "Camera Error. Please allow access.";
         });
     </script>
 </body>
