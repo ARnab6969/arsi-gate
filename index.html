@@ -1,90 +1,143 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARSI GATE | QR SCANNER</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <style>
-        body { font-family: sans-serif; background: #121212; color: white; margin: 0; text-align: center; }
-        #reader { width: 100%; max-width: 500px; margin: auto; background: #000; }
-        .container { padding: 20px; }
-        .status-box { margin-top: 20px; padding: 15px; border-radius: 10px; background: #1e1e1e; border: 1px solid #333; }
-        #result { font-size: 1.5rem; font-weight: bold; color: #4ade80; margin: 10px 0; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arsi Fitness Gym | QR Entry</title>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+    body {
+        margin: 0;
+        font-family: 'Segoe UI', sans-serif;
+        background: linear-gradient(135deg, #111, #1f1f1f);
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .card {
+        background: #222;
+        padding: 30px;
+        border-radius: 20px;
+        box-shadow: 0 0 25px rgba(0,255,150,0.2);
+        width: 350px;
+        text-align: center;
+    }
+
+    h1 {
+        margin-bottom: 10px;
+        color: #00ff99;
+    }
+
+    p {
+        font-size: 14px;
+        opacity: 0.7;
+    }
+
+    #reader {
+        margin-top: 20px;
+        border-radius: 15px;
+        overflow: hidden;
+    }
+
+    .status {
+        margin-top: 15px;
+        padding: 10px;
+        border-radius: 10px;
+        font-weight: bold;
+    }
+
+    .success {
+        background: #003d2e;
+        color: #00ff99;
+    }
+
+    .error {
+        background: #3d0000;
+        color: #ff4d4d;
+    }
+
+    .footer {
+        margin-top: 15px;
+        font-size: 12px;
+        opacity: 0.5;
+    }
+</style>
 </head>
+
 <body>
 
-<div class="container">
-    <h2>ARSI GATE SCANNER</h2>
-    <p>Align Member QR/Token within the frame</p>
-    
-    <div id="reader"></div>
+<div class="card">
+    <h1>ARSI FITNESS</h1>
+    <p>Scan Gym Wall QR to Enter</p>
 
-    <div class="status-box">
-        <div id="result">Ready to Scan</div>
-        <div id="debug" style="font-size: 0.8rem; color: #666;">Waiting for camera...</div>
+    <div id="reader" width="300px"></div>
+
+    <div id="statusBox"></div>
+
+    <div class="footer">
+        Secure Entry System
     </div>
 </div>
 
 <script>
-    const html5QrCode = new Html5Qrcode("reader");
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-    // Start the camera
-    html5QrCode.start(
-        { facingMode: "environment" }, // Use back camera
-        config,
-        (decodedText) => {
-            // Logic when a QR/Token is detected
-            processScan(decodedText);
-        },
-        (errorMessage) => {
-            // Keep scanning even if there's a minor error
-        }
-    ).catch(err => {
-        document.getElementById('debug').innerHTML = "Camera Error: " + err;
-    });
+const RENDER_API = "https://YOUR-RENDER-URL.onrender.com/api/mobile-qr-check-in";
 
-    function processScan(token) {
-        // Stop scanning temporarily so it doesn't spam requests
-        html5QrCode.pause();
-        
-        document.getElementById('result').innerHTML = "Scanned: " + token;
-        document.getElementById('debug').innerHTML = "Sending to server...";
+function showStatus(message, type) {
+    const box = document.getElementById("statusBox");
+    box.innerHTML = `<div class="status ${type}">${message}</div>`;
+}
 
-        // Send the scanned token to your local Python server
-        // Use '1234' as the secret_token for your universal logic
-        fetch('http://YOUR_LOCAL_IP:5000/api/mobile-qr-check-in', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                member_id: "scanner_input", // We identify this as a scanner scan
-                secret_token: token         // The code read by the camera
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'granted') {
-                document.getElementById('result').innerHTML = "ACCESS GRANTED";
-                document.getElementById('result').style.color = "#4ade80";
-            } else {
-                document.getElementById('result').innerHTML = "DENIED: " + data.message;
-                document.getElementById('result').style.color = "#f87171";
-            }
-            
-            // Resume camera after 3 seconds
-            setTimeout(() => {
-                document.getElementById('result').innerHTML = "Ready to Scan";
-                document.getElementById('result').style.color = "#4ade80";
-                html5QrCode.resume();
-            }, 3000);
-        })
-        .catch(err => {
-            alert("Local Server Not Found! Check IP/Network.");
-            html5QrCode.resume();
-        });
+function onScanSuccess(decodedText) {
+
+    // decodedText should be: 1234
+    if (decodedText !== "1234") {
+        showStatus("Invalid Gym QR Code ❌", "error");
+        return;
     }
+
+    const memberId = prompt("Enter Your Member ID");
+
+    if (!memberId) {
+        showStatus("Member ID Required ❌", "error");
+        return;
+    }
+
+    fetch(RENDER_API, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            member_id: parseInt(memberId),
+            secret_token: "1234"
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === "granted") {
+            showStatus("Access Granted ✅ Door Opening...", "success");
+        } else {
+            showStatus("Access Denied ❌", "error");
+        }
+    })
+    .catch(err => {
+        showStatus("Server Error ⚠", "error");
+    });
+}
+
+const html5QrCode = new Html5Qrcode("reader");
+html5QrCode.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    onScanSuccess
+);
+
 </script>
 
 </body>
