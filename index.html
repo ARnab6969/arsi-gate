@@ -3,33 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arsi Gym Access</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <title>ARSI Gym Access</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        :root { --primary: #ff9800; --bg: #0f0f0f; --card: #1a1a1a; --text: #ffffff; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { background: var(--card); width: 90%; max-width: 400px; padding: 30px; border-radius: 24px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h1 { font-weight: 800; color: var(--primary); margin-bottom: 5px; }
-        .status-badge { background: rgba(255,152,0,0.1); color: var(--primary); padding: 8px 16px; border-radius: 50px; font-size: 0.8rem; font-weight: 600; display: inline-block; margin-bottom: 20px; }
-        .btn { background: var(--primary); color: #000; border: none; padding: 16px; border-radius: 12px; width: 100%; font-weight: 800; cursor: pointer; }
-        #video-container { width: 100%; aspect-ratio: 1; margin-top: 20px; border-radius: 20px; overflow: hidden; display: none; border: 2px solid var(--primary); }
+        :root { --primary: #ff9800; --bg: #0f0f0f; --card: #1a1a1a; }
+        body { font-family: sans-serif; background: var(--bg); color: white; text-align: center; padding: 20px; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .container { background: var(--card); padding: 30px; border-radius: 24px; max-width: 350px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { color: var(--primary); margin-bottom: 5px; font-size: 28px; }
+        .member-info { background: rgba(255,152,0,0.1); padding: 15px; border-radius: 15px; margin: 20px 0; border: 1px solid rgba(255,152,0,0.2); }
+        .days-count { font-size: 24px; font-weight: bold; color: var(--primary); display: block; }
+        input { width: 80%; padding: 15px; font-size: 20px; text-align: center; border-radius: 12px; border: 1px solid #333; background: #000; color: white; margin: 10px 0; }
+        .btn { background: var(--primary); color: black; padding: 16px; width: 100%; border-radius: 12px; font-weight: bold; border: none; cursor: pointer; font-size: 16px; }
+        #video-container { width: 100%; aspect-ratio: 1; display: none; margin-top: 20px; border-radius: 20px; overflow: hidden; border: 2px solid var(--primary); }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #status-text { margin-top: 15px; font-size: 0.9rem; font-weight: 600; color: var(--primary); }
+        #status { margin-top: 15px; font-size: 14px; opacity: 0.8; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>ARSI GYM</h1>
-    <div class="status-badge">SECURE ACCESS</div>
     
-    <div id="loading-msg">Initializing Session...</div>
+    <div id="member-display" class="member-info" style="display:none;">
+        <span id="welcome-name" style="font-size: 18px; font-weight: 600;">Welcome!</span>
+        <hr style="border: 0; border-top: 1px solid #333; margin: 10px 0;">
+        <span class="days-count" id="days-left">0</span>
+        <span style="font-size: 12px; opacity: 0.7;">DAYS REMAINING</span>
+    </div>
+
+    <div id="pin-section">
+        <p id="pin-label">Enter Device PIN</p>
+        <input type="password" id="userPin" maxlength="4" placeholder="••••" inputmode="numeric">
+        <button class="btn" onclick="checkPin()">UNLOCK SCANNER</button>
+    </div>
 
     <div id="scan-section" style="display:none;">
         <div id="video-container"><video id="preview" playsinline></video></div>
-        <button id="scanBtn" class="btn" onclick="startScanner()">OPEN CAMERA TO SCAN</button>
-        <p id="status-text">Ready to scan QR: 1234</p>
+        <p id="status">Scan the Wall QR (1234)</p>
     </div>
 </div>
 
@@ -37,31 +47,64 @@
     const video = document.getElementById('preview');
     const RENDER_BRIDGE_URL = "https://arsi-bridge.onrender.com";
     
-    // Catch token from URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const activeToken = urlParams.get('token');
+    // 1. Get stored data
+    let savedToken = localStorage.getItem('arsi_token');
+    let savedPin = localStorage.getItem('arsi_pin');
+    let savedName = localStorage.getItem('arsi_name');
+    let savedDays = localStorage.getItem('arsi_days');
 
-    // Check if token exists
-    if (activeToken) {
-        document.getElementById('loading-msg').style.display = 'none';
+    // 2. Catch new data from Laptop Redirect
+    const urlParams = new URLSearchParams(window.location.search);
+    const incomingToken = urlParams.get('token');
+    const incomingName = urlParams.get('name');
+    const incomingDays = urlParams.get('days');
+
+    if (incomingToken) {
+        localStorage.setItem('arsi_token', incomingToken);
+        localStorage.setItem('arsi_name', incomingName || 'Member');
+        localStorage.setItem('arsi_days', incomingDays || '0');
+        savedToken = incomingToken;
+        savedName = incomingName;
+        savedDays = incomingDays;
+        document.getElementById('pin-label').innerText = "Create a 4-Digit Device PIN";
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Unauthorized Check
+    if (!savedToken) {
+        document.querySelector('.container').innerHTML = "<h1>Access Denied</h1><p>Please log in at the Gym laptop first to link this device.</p>";
+    }
+
+    function checkPin() {
+        const inputPin = document.getElementById('userPin').value;
+        if (!savedPin) {
+            localStorage.setItem('arsi_pin', inputPin);
+            alert("Device Locked! PIN Saved.");
+            location.reload();
+        } else if (inputPin === savedPin) {
+            showScanner();
+        } else {
+            alert("Incorrect PIN");
+        }
+    }
+
+    function showScanner() {
+        document.getElementById('pin-section').style.display = 'none';
+        document.getElementById('member-display').style.display = 'block';
+        document.getElementById('welcome-name').innerText = "Hello, " + savedName;
+        document.getElementById('days-left').innerText = savedDays;
         document.getElementById('scan-section').style.display = 'block';
-    } else {
-        document.getElementById('loading-msg').innerHTML = "<span style='color:red'>Error: Invalid Session.<br>Please login via Gym WiFi first.</span>";
+        document.getElementById('video-container').style.display = 'block';
+        startScanner();
     }
 
     function startScanner() {
-        document.getElementById('video-container').style.display = 'block';
-        document.getElementById('scanBtn').style.display = 'none';
-        
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
             .then(stream => {
                 video.srcObject = stream;
-                video.setAttribute("playsinline", true);
                 video.play();
                 requestAnimationFrame(tick);
-            })
-            .catch(err => {
-                alert("Camera Error: Please allow camera access in browser settings.");
             });
     }
 
@@ -75,38 +118,27 @@
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-            if (code) {
-                // Check if the QR matches your new "1234" code
-                if (code.data === "1234") {
-                    sendToBridge(code.data);
-                    return; // Stop the loop on match
-                } else {
-                    document.getElementById('status-text').innerText = "Wrong QR. Looking for '1234'.";
-                }
+            if (code && code.data === "1234") {
+                sendToBridge(code.data);
+                return;
             }
         }
         requestAnimationFrame(tick);
     }
 
     function sendToBridge(wallContent) {
-        document.getElementById('status-text').innerText = "Unlocking Gate...";
-        
+        document.getElementById('status').innerText = "Unlocking Door...";
         fetch(`${RENDER_BRIDGE_URL}/api/mobile-scan-wall`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ 
-                token: activeToken, 
-                qr_content: wallContent 
-            })
+            body: JSON.stringify({ token: savedToken, qr_content: wallContent })
         })
         .then(res => res.json())
         .then(data => {
-            alert("ACCESS GRANTED: " + data.message);
-            location.reload(); 
+            alert("✅ Welcome to ARSI GYM!");
+            location.reload();
         })
-        .catch(err => {
-            alert("Bridge Connection Failed. Is Render Online?");
-        });
+        .catch(err => alert("Connection Error"));
     }
 </script>
 </body>
