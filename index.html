@@ -3,20 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Arsi Fitness Gym | Secure Entry</title>
+<title>Arsi Fitness Secure Entry</title>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <style>
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
 body {
+    margin: 0;
     font-family: 'Segoe UI', sans-serif;
-    background: linear-gradient(135deg, #0f0f0f, #1c1c1c);
+    background: linear-gradient(135deg,#0f0f0f,#1c1c1c);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -24,157 +20,126 @@ body {
     color: white;
 }
 
-.container {
+.card {
     width: 95%;
     max-width: 400px;
     background: #181818;
-    border-radius: 25px;
     padding: 25px;
+    border-radius: 25px;
     text-align: center;
     box-shadow: 0 0 40px rgba(0,255,150,0.15);
-    border: 1px solid rgba(0,255,150,0.2);
 }
 
-.logo {
-    font-size: 26px;
-    font-weight: bold;
+h1 {
     color: #00ff99;
     margin-bottom: 5px;
-    letter-spacing: 1px;
-}
-
-.subtitle {
-    font-size: 13px;
-    opacity: 0.6;
-    margin-bottom: 20px;
-}
-
-#reader {
-    border-radius: 15px;
-    overflow: hidden;
-}
-
-.input-group {
-    margin-top: 15px;
 }
 
 input {
     width: 100%;
     padding: 12px;
+    margin-top: 15px;
     border-radius: 10px;
     border: none;
-    outline: none;
     background: #222;
     color: white;
-    font-size: 15px;
     text-align: center;
 }
 
 button {
-    margin-top: 12px;
     width: 100%;
     padding: 12px;
+    margin-top: 12px;
     border-radius: 10px;
     border: none;
     background: #00ff99;
     color: black;
     font-weight: bold;
-    font-size: 15px;
     cursor: pointer;
-    transition: 0.3s;
 }
 
-button:hover {
-    background: #00cc7a;
+#reader {
+    margin-top: 20px;
+    border-radius: 15px;
+    overflow: hidden;
 }
 
 .status {
     margin-top: 15px;
     padding: 10px;
     border-radius: 10px;
-    font-weight: bold;
     display: none;
 }
 
-.success {
-    background: #003d2e;
-    color: #00ff99;
-}
+.success { background:#003d2e; color:#00ff99; }
+.error { background:#3d0000; color:#ff4d4d; }
 
-.error {
-    background: #3d0000;
-    color: #ff4d4d;
-}
-
-.footer {
+#memberQR {
     margin-top: 15px;
-    font-size: 11px;
-    opacity: 0.4;
 }
 </style>
 </head>
-
 <body>
 
-<div class="container">
-    <div class="logo">ARSI FITNESS</div>
-    <div class="subtitle">Secure QR Entry System</div>
+<div class="card">
+    <h1>ARSI FITNESS</h1>
+    <p>Secure Smart Entry</p>
 
-    <div id="reader" width="300px"></div>
+    <input type="text" id="phone" placeholder="Enter Phone Number">
+    <button onclick="loginMember()">Login</button>
 
-    <div class="input-group">
-        <input type="number" id="memberId" placeholder="Enter Member ID">
-        <button onclick="sendAccess()">Verify & Unlock</button>
-    </div>
+    <div id="memberQR"></div>
+
+    <div id="reader"></div>
 
     <div id="statusBox" class="status"></div>
-
-    <div class="footer">
-        Powered by Arsi Smart Gym System
-    </div>
 </div>
 
 <script>
 
-const API_URL = "https://YOUR-RENDER-URL.onrender.com/api/mobile-qr-check-in";
+const BASE_URL = "https://YOUR-RENDER-URL.onrender.com";
 
-let scannedWallCode = null;
+let memberToken = null;
 
-function showStatus(message, type) {
+function showStatus(msg, type) {
     const box = document.getElementById("statusBox");
     box.style.display = "block";
     box.className = "status " + type;
-    box.innerText = message;
+    box.innerText = msg;
+}
+
+function loginMember() {
+    const phone = document.getElementById("phone").value;
+
+    fetch(BASE_URL + "/member-login", {
+        method: "POST",
+        headers: {"Content-Type":"application/x-www-form-urlencoded"},
+        body: "phone=" + phone
+    })
+    .then(res => res.text())
+    .then(html => {
+        if (html.includes("qr_token")) {
+            showStatus("Login Success ✅ Scan Gym Wall QR", "success");
+        } else {
+            showStatus("Member Not Found ❌", "error");
+        }
+    });
 }
 
 function onScanSuccess(decodedText) {
-    if (decodedText === "1234") {
-        scannedWallCode = decodedText;
-        showStatus("Gym QR Verified ✅ Enter Member ID", "success");
-    } else {
+
+    if (decodedText !== "1234") {
         showStatus("Invalid Gym QR ❌", "error");
-    }
-}
-
-function sendAccess() {
-
-    const memberId = document.getElementById("memberId").value;
-
-    if (!scannedWallCode) {
-        showStatus("Please scan Gym QR first ❌", "error");
         return;
     }
 
-    if (!memberId) {
-        showStatus("Enter Member ID ❌", "error");
-        return;
-    }
+    const phone = document.getElementById("phone").value;
 
-    fetch(API_URL, {
+    fetch(BASE_URL + "/api/mobile-qr-check-in", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {"Content-Type":"application/json"},
         body: JSON.stringify({
-            member_id: parseInt(memberId),
+            member_id: 0, 
             secret_token: "1234"
         })
     })
@@ -185,9 +150,6 @@ function sendAccess() {
         } else {
             showStatus("Access Denied ❌", "error");
         }
-    })
-    .catch(() => {
-        showStatus("Server Error ⚠ Try Again", "error");
     });
 }
 
